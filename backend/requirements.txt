@@ -1,0 +1,36 @@
+# Core
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+email-validator>=2.2.0
+
+# Database
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+aiosqlite>=0.20.0
+greenlet>=3.0.0
+
+# Security
+cryptography>=44.0.0
+bcrypt>=4.2.0
+python-jose[cryptography]>=3.3.0
+# passlib removed — using bcrypt directly (passlib incompatible with bcrypt 5.x)
+
+# LLM
+anthropic>=0.40.0
+
+# Exchange
+ccxt>=4.4.0
+
+# Vector DB (Experience Pool)
+chromadb>=0.5.0
+
+# Utilities
+python-dotenv>=1.0.1
+httpx>=0.28.0
+
+# Dev & Testing (not installed in production Docker image)
+# pytest>=8.3.0
+# pytest-asyncio>=0.24.0
+# ruff>=0.8.0
