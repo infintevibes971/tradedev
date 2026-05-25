@@ -52,3 +52,18 @@ export interface StoredApiKey {
   is_paper: boolean;
   created_at: string;
 }
+
+export interface AIProviderInfo {
+  id: string;
+  display_name: string;
+  configured: boolean;
+}
+
+export interface AIStatus {
+  available: boolean;
+  mode: string;
+  primary: string;
+  fallback_chain: string[];
+  valid_modes: string[];
+  providers: Record<string, AIProviderInfo>;
+}

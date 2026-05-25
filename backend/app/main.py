@@ -14,6 +14,7 @@ from app.agents.qa_manager import QAManager
 from app.agents.registry import AgentRegistry
 from app.api.routes_agents import router as agents_router
 from app.api.routes_agents import set_factory
+from app.api.routes_ai import router as ai_router
 from app.api.routes_users import router as users_router
 from app.chain.tradechain import TradeChain
 from app.config import settings
@@ -72,16 +73,21 @@ app.add_middleware(
 
 app.include_router(users_router, prefix="/api")
 app.include_router(agents_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")
 
 
 @app.get("/health")
 async def health_check() -> dict:
+    from app.ai.registry import get_mode, is_available
+
     return {
         "status": "online",
         "company": settings.app_name,
         "agents_active": registry.active_count,
         "agents_total": registry.total_count,
         "ws_clients": ws_manager.client_count,
+        "ai_available": is_available(),
+        "ai_mode": get_mode(),
     }
 
 

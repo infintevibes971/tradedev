@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import type { StoredApiKey, UserProfile } from "../types/agents";
+import { useCallback, useEffect, useState } from "react";
+import type { AIStatus, StoredApiKey, UserProfile } from "../types/agents";
 
 const EXCHANGES = [
   { value: "binance", label: "Binance" },
@@ -193,6 +193,145 @@ function AddKeyForm({ userId, onAdded }: { userId: string; onAdded: () => void }
   );
 }
 
+const MODE_INFO: Record<string, { label: string; desc: string }> = {
+  single: { label: "Single", desc: "Primary provider + fallback chain" },
+  consensus: { label: "Consensus", desc: "Two providers must agree" },
+  disabled: { label: "Disabled", desc: "No AI — technicals only" },
+};
+
+function AIProviderPanel() {
+  const [status, setStatus] = useState<AIStatus | null>(null);
+  const [switching, setSwitching] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai/status");
+      if (res.ok) setStatus(await res.json());
+    } catch { /* */ }
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const switchMode = async (mode: string) => {
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/ai/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      if (res.ok) await fetchStatus();
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  const switchPrimary = async (provider: string) => {
+    setSwitching(true);
+    try {
+      const res = await fetch("/api/ai/primary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      if (res.ok) await fetchStatus();
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  if (!status) return null;
+
+  const providers = Object.values(status.providers);
+  const configuredCount = providers.filter((p) => p.configured).length;
+
+  return (
+    <div className="bg-gray-900/50 border border-purple-700/30 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-purple-400 uppercase tracking-wider">
+          AI Providers
+        </h3>
+        <span className={`text-[10px] px-2 py-0.5 rounded ${
+          status.available
+            ? "bg-green-900/40 text-green-400"
+            : "bg-gray-800 text-gray-500"
+        }`}>
+          {status.available ? `${configuredCount} active` : "offline"}
+        </span>
+      </div>
+
+      {/* Provider list */}
+      <div className="space-y-1.5 mb-3">
+        {providers.map((p) => (
+          <div
+            key={p.id}
+            className={`flex items-center justify-between px-3 py-2 rounded-lg transition cursor-pointer ${
+              p.id === status.primary
+                ? "bg-purple-900/30 border border-purple-700/40"
+                : "bg-gray-800/50 border border-transparent hover:border-gray-700/50"
+            }`}
+            onClick={() => p.configured && switchPrimary(p.id)}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                p.configured ? "bg-green-500" : "bg-gray-600"
+              }`} />
+              <span className="text-xs text-gray-200">{p.display_name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {p.id === status.primary && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-300">
+                  primary
+                </span>
+              )}
+              {!p.configured && (
+                <span className="text-[9px] text-gray-600">no key</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Mode selector */}
+      <div className="border-t border-gray-700/50 pt-3">
+        <p className="text-[10px] text-gray-500 mb-2">AI Mode</p>
+        <div className="flex gap-1.5">
+          {status.valid_modes.map((m) => (
+            <button
+              key={m}
+              onClick={() => switchMode(m)}
+              disabled={switching}
+              className={`flex-1 py-1.5 text-[10px] font-medium uppercase tracking-wider rounded transition ${
+                m === status.mode
+                  ? "bg-purple-900/60 text-purple-300 border border-purple-700/50"
+                  : "text-gray-500 hover:text-gray-300 border border-gray-700/30 hover:border-gray-600"
+              }`}
+              title={MODE_INFO[m]?.desc}
+            >
+              {MODE_INFO[m]?.label ?? m}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-gray-600 mt-1.5">
+          {MODE_INFO[status.mode]?.desc ?? status.mode}
+        </p>
+      </div>
+
+      {/* Env keys hint */}
+      <div className="border-t border-gray-700/50 pt-3 mt-3">
+        <p className="text-[10px] text-gray-500 mb-1">
+          Set provider API keys in the server <code className="text-purple-400 bg-gray-800 px-1 rounded">.env</code> file:
+        </p>
+        <code className="block text-[9px] text-gray-500 bg-gray-800 rounded p-2 font-mono leading-relaxed">
+          ANTHROPIC_API_KEY=sk-ant-...<br/>
+          OPENAI_API_KEY=sk-...<br/>
+          GEMINI_API_KEY=AI...
+        </code>
+      </div>
+    </div>
+  );
+}
+
 export function KeyVault({ user, onLogin, onLogout }: Props) {
   const [keys, setKeys] = useState<StoredApiKey[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -278,6 +417,8 @@ export function KeyVault({ user, onLogin, onLogout }: Props) {
                 </li>
               </ul>
             </div>
+            {/* AI Provider panel (visible without login) */}
+            <AIProviderPanel />
           </>
         ) : (
           <>
@@ -394,19 +535,8 @@ export function KeyVault({ user, onLogin, onLogout }: Props) {
               </ul>
             </div>
 
-            {/* Env file hint */}
-            <div className="bg-gray-900/50 border border-blue-700/30 rounded-lg p-4">
-              <h3 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
-                Anthropic API Key
-              </h3>
-              <p className="text-[11px] text-gray-500 mb-2">
-                The Claude API key for agent AI decisions goes in the server's{" "}
-                <code className="text-blue-400 bg-gray-800 px-1 rounded">.env</code> file, not here.
-              </p>
-              <code className="block text-[10px] text-gray-400 bg-gray-800 rounded p-2 font-mono">
-                ANTHROPIC_API_KEY=sk-ant-...
-              </code>
-            </div>
+            {/* AI Provider management */}
+            <AIProviderPanel />
           </>
         )}
       </div>

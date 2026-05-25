@@ -3,6 +3,8 @@ from decimal import Decimal
 from enum import Enum
 
 from app.agents.base import BaseAgent
+from app.ai.base_provider import AIAdvice
+from app.ai.registry import consult as ai_consult, is_available as ai_available
 from app.chain.messages import Message, MessageType, Priority
 from app.chain.tradechain import TradeChain
 from app.exchange.adapter import ExchangeAdapter
@@ -56,6 +58,44 @@ class TradingBot(BaseAgent):
     async def generate_signal(self) -> Signal:
         """Override in subclass. Analyze market data and return a trading signal."""
         return Signal.HOLD
+
+    async def consult_ai(self, indicators: dict | None = None) -> AIAdvice | None:
+        """Ask the AI registry for a BUY/SELL/HOLD opinion on the current symbol.
+
+        Any strategy bot can call this as an advisory input.
+        Returns None if AI is unavailable or disabled.
+        """
+        if not ai_available():
+            return None
+
+        try:
+            ticker = await self.exchange.get_ticker(self.symbol)
+            price = float(ticker["last"])
+            change_24h = float(ticker.get("change_24h", 0.0))
+
+            context = {
+                "balance": float(self.allocated_capital),
+                "open_trades": 1 if self.position != 0 else 0,
+                "daily_pnl": float(self.realized_pnl),
+            }
+
+            advice = await ai_consult(
+                symbol=self.symbol,
+                price=price,
+                change_24h=change_24h,
+                indicators=indicators or {},
+                context=context,
+            )
+
+            self.logger.info(
+                "AI advisory for %s: %s (%d%%) via %s",
+                self.symbol, advice.action, advice.confidence, advice.source,
+            )
+            return advice
+
+        except Exception:
+            self.logger.warning("AI consultation failed for %s", self.symbol, exc_info=True)
+            return None
 
     async def execute(self) -> None:
         try:
