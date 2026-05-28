@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { AgentStatus, AIStatus, ChainMessage, HealthStatus, Strategy } from "../types/agents";
 
 interface Props {
@@ -339,7 +339,6 @@ function ActivityTicker({ messages }: { messages: ChainMessage[] }) {
 
 export function Dashboard({ health, agents, messages, strategies, onSpawn }: Props) {
   const traders = agents.filter((a) => a.role.startsWith("trader:"));
-  const totalPnl = traders.reduce((sum, a) => sum + Number(a.realized_pnl ?? 0), 0);
   const totalTrades = traders.reduce((sum, a) => sum + (a.total_trades ?? 0), 0);
   const errorCount = agents.reduce((sum, a) => sum + a.metrics.errors, 0);
   const riskAlerts = messages.filter((m) => m.type === "risk.alert");
