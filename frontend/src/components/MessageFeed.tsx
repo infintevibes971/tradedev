@@ -1,31 +1,18 @@
 import { useEffect, useRef } from "react";
 import type { ChainMessage } from "../types/agents";
 
-const TYPE_COLORS: Record<string, string> = {
-  "trade.executed": "text-green-400",
-  "trade.request": "text-blue-400",
-  "trade.rejected": "text-red-400",
-  "risk.alert": "text-red-500 font-bold",
-  "capital.request": "text-yellow-400",
-  "capital.response": "text-yellow-300",
-  "status.report": "text-gray-400",
-  "error.report": "text-red-400",
-  "agent.chat": "text-cyan-400",
-  "system.command": "text-purple-400",
-  "report.weekly": "text-amber-400",
-};
-
-const TYPE_ICONS: Record<string, string> = {
-  "trade.executed": "⬆",
-  "trade.request": "📋",
-  "risk.alert": "⚠",
-  "capital.request": "💰",
-  "capital.response": "✅",
-  "error.report": "❌",
-  "agent.chat": "💬",
-  "system.command": "⚙",
-  "status.report": "📊",
-  "report.weekly": "📈",
+const TYPE_STYLES: Record<string, { color: string; icon: string; bg: string }> = {
+  "trade.executed": { color: "text-green-400", icon: "⬆", bg: "bg-green-900/10" },
+  "trade.request": { color: "text-blue-400", icon: "📋", bg: "bg-blue-900/10" },
+  "trade.rejected": { color: "text-red-400", icon: "✕", bg: "bg-red-900/10" },
+  "risk.alert": { color: "text-red-500 font-semibold", icon: "⚠", bg: "bg-red-900/20" },
+  "capital.request": { color: "text-yellow-400", icon: "💰", bg: "" },
+  "capital.response": { color: "text-yellow-300", icon: "✓", bg: "" },
+  "status.report": { color: "text-gray-400", icon: "📊", bg: "" },
+  "error.report": { color: "text-red-400", icon: "✕", bg: "bg-red-900/10" },
+  "agent.chat": { color: "text-cyan-400", icon: "💬", bg: "" },
+  "system.command": { color: "text-purple-400", icon: "⚙", bg: "" },
+  "report.weekly": { color: "text-amber-400", icon: "📈", bg: "" },
 };
 
 function formatPayload(msg: ChainMessage): string {
@@ -55,7 +42,7 @@ function formatPayload(msg: ChainMessage): string {
 }
 
 function formatTime(ts: string): string {
-  return new Date(ts).toLocaleTimeString();
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 interface Props {
@@ -72,39 +59,62 @@ export function MessageFeed({ messages, onClear }: Props) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-          TradeChain Live Feed
-        </h2>
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-700/60">
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">{messages.length} msgs</span>
+          <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+            TradeChain Feed
+          </h2>
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-[10px] text-gray-500">live</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-gray-600 tabular-nums">{messages.length}</span>
           <button
             onClick={onClear}
-            className="text-xs text-gray-500 hover:text-gray-300 transition"
+            className="text-[10px] text-gray-500 hover:text-gray-300 px-2 py-0.5 rounded hover:bg-gray-800/50 transition"
           >
             Clear
           </button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-1 font-mono text-xs">
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-0.5 font-mono text-[11px]">
         {messages.length === 0 && (
-          <p className="text-gray-600 text-center mt-8">
-            Waiting for agent activity...
-          </p>
-        )}
-        {messages.map((msg) => (
-          <div key={msg.id} className="flex gap-2 py-0.5 hover:bg-gray-800/50 px-1 rounded">
-            <span className="text-gray-600 shrink-0">{formatTime(msg.timestamp)}</span>
-            <span className="shrink-0">{TYPE_ICONS[msg.type] ?? "•"}</span>
-            <span className="text-amber-300 shrink-0 w-36 truncate">{msg.sender_id}</span>
-            {msg.target_id && (
-              <span className="text-gray-500 shrink-0">→ {msg.target_id}</span>
-            )}
-            <span className={TYPE_COLORS[msg.type] ?? "text-gray-400"}>
-              {formatPayload(msg)}
-            </span>
+          <div className="text-center mt-16">
+            <p className="text-xl mb-2">📡</p>
+            <p className="text-gray-600 text-xs">
+              Waiting for agent activity...
+            </p>
+            <p className="text-gray-700 text-[10px] mt-1">
+              Messages will appear here in real-time via WebSocket
+            </p>
           </div>
-        ))}
+        )}
+        {messages.map((msg) => {
+          const style = TYPE_STYLES[msg.type] ?? { color: "text-gray-400", icon: "•", bg: "" };
+          return (
+            <div
+              key={msg.id}
+              className={`flex gap-2 py-1 px-2 rounded-md hover:bg-gray-800/40 transition-colors ${style.bg}`}
+            >
+              <span className="text-gray-600 shrink-0 tabular-nums">{formatTime(msg.timestamp)}</span>
+              <span className="shrink-0 w-4 text-center">{style.icon}</span>
+              <span className="text-amber-300/80 shrink-0 w-32 truncate font-medium">
+                {msg.sender_id}
+              </span>
+              {msg.target_id && (
+                <span className="text-gray-600 shrink-0">
+                  <span className="text-gray-700">→</span> {msg.target_id}
+                </span>
+              )}
+              <span className={`truncate ${style.color}`}>
+                {formatPayload(msg)}
+              </span>
+            </div>
+          );
+        })}
         <div ref={bottomRef} />
       </div>
     </div>
