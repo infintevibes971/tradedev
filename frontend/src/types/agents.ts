@@ -45,6 +45,8 @@ export interface PortfolioSummary {
   open_positions: number;
   active_bots: number;
   balances: Record<string, string>;
+  exchange: string;
+  is_live: boolean;
   strategies: Record<string, {
     count: number;
     pnl: string;

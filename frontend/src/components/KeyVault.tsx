@@ -356,6 +356,8 @@ export function KeyVault({ user, onLogin, onLogout }: Props) {
   const [keys, setKeys] = useState<StoredApiKey[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string | null>(null);
 
   const fetchKeys = useCallback(async () => {
     if (!user) return;
@@ -366,6 +368,35 @@ export function KeyVault({ user, onLogin, onLogout }: Props) {
         setKeys(data.keys);
       }
     } catch { /* */ }
+  }, [user]);
+
+  const connectExchanges = useCallback(async () => {
+    if (!user) return;
+    setConnecting(true);
+    setConnectionStatus(null);
+    try {
+      const res = await fetch("/api/portfolio/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: user.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const active = data.active?.active_exchange ?? "paper";
+        const isLive = data.active?.is_live ?? false;
+        setConnectionStatus(
+          isLive
+            ? `Connected to ${active.toUpperCase()}`
+            : "Using paper trading"
+        );
+      } else {
+        setConnectionStatus(`Error: ${data.detail ?? "connection failed"}`);
+      }
+    } catch (err) {
+      setConnectionStatus("Connection failed — check server logs");
+    } finally {
+      setConnecting(false);
+    }
   }, [user]);
 
   const deleteKey = async (keyId: string) => {
@@ -529,6 +560,34 @@ export function KeyVault({ user, onLogin, onLogout }: Props) {
                 </div>
               )}
             </div>
+
+            {/* Connect exchanges — activates stored keys */}
+            {keys.length > 0 && (
+              <div className="bg-gray-900/50 border border-green-700/30 rounded-lg p-4">
+                <h3 className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">
+                  Go Live
+                </h3>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Connect your stored exchange keys to see real balances and enable live trading.
+                </p>
+                <button
+                  onClick={connectExchanges}
+                  disabled={connecting}
+                  className="w-full py-2.5 text-sm font-semibold bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition"
+                >
+                  {connecting ? "Connecting..." : "Connect Exchanges"}
+                </button>
+                {connectionStatus && (
+                  <p className={`text-[11px] mt-2 text-center ${
+                    connectionStatus.startsWith("Error") || connectionStatus.startsWith("Connection failed")
+                      ? "text-red-400"
+                      : "text-green-400"
+                  }`}>
+                    {connectionStatus}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Security info */}
             <div className="bg-gray-900/50 border border-gray-700/50 rounded-lg p-4">

@@ -53,9 +53,20 @@ function BalanceWidget() {
       {/* Main balance display */}
       <div className="p-5">
         <div className="flex items-center justify-between mb-1">
-          <p className="text-[11px] text-gray-500 uppercase tracking-widest font-medium">
-            Current Balance
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] text-gray-500 uppercase tracking-widest font-medium">
+              Current Balance
+            </p>
+            {portfolio && (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium uppercase ${
+                portfolio.is_live
+                  ? "bg-green-900/40 text-green-400"
+                  : "bg-amber-900/30 text-amber-400"
+              }`}>
+                {portfolio.exchange}
+              </span>
+            )}
+          </div>
           <svg
             className={`w-4 h-4 text-gray-500 transition-transform duration-300 ${expanded ? "rotate-180" : ""}`}
             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}

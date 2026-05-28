@@ -16,11 +16,11 @@ from app.api.routes_agents import router as agents_router
 from app.api.routes_agents import set_factory
 from app.api.routes_ai import router as ai_router
 from app.api.routes_portfolio import router as portfolio_router
-from app.api.routes_portfolio import set_exchange, set_registry as set_portfolio_registry
+from app.api.routes_portfolio import set_exchange_manager, set_registry as set_portfolio_registry
 from app.api.routes_users import router as users_router
 from app.chain.tradechain import TradeChain
 from app.config import settings
-from app.exchange.mock import MockAdapter
+from app.exchange.manager import ExchangeManager
 from app.models.database import init_db
 from app.websocket.manager import ConnectionManager
 
@@ -33,10 +33,10 @@ ws_manager = ConnectionManager()
 chain.on_ws_message(ws_manager.broadcast_message)
 
 
-exchange = MockAdapter()
-factory = AgentFactory(chain, registry, exchange)
+exchange_manager = ExchangeManager()
+factory = AgentFactory(chain, registry, exchange_manager.active)
 set_factory(factory)
-set_exchange(exchange)
+set_exchange_manager(exchange_manager)
 set_portfolio_registry(registry)
 
 
@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
     )
     yield
     await registry.stop_all()
+    await exchange_manager.close_all()
     logging.info(f"{settings.app_name} shutting down — all agents stopped")
 
 
