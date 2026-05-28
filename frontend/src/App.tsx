@@ -62,6 +62,12 @@ function App() {
   const handleLogin = useCallback((u: UserProfile) => {
     setUser(u);
     localStorage.setItem("tradedev_user", JSON.stringify(u));
+    // Auto-connect stored exchange keys on login
+    fetch("/api/portfolio/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: u.id }),
+    }).catch(() => {});
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -89,6 +95,17 @@ function App() {
       if (res.ok) setStrategies(await res.json());
     } catch { /* server not up yet */ }
   }, []);
+
+  // Auto-connect exchanges when app loads with a saved user session
+  useEffect(() => {
+    if (user) {
+      fetch("/api/portfolio/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: user.id }),
+      }).catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchAgents();

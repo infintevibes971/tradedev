@@ -116,7 +116,7 @@ function AddKeyForm({ userId, onAdded }: { userId: string; onAdded: () => void }
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [passphrase, setPassphrase] = useState("");
-  const [isPaper, setIsPaper] = useState(true);
+  const [isPaper, setIsPaper] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

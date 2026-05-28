@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import logging
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.agents.registry import AgentRegistry
 from app.agents.traders.arbitrage import ArbitrageBot
@@ -11,6 +13,9 @@ from app.agents.traders.momentum import MomentumBot
 from app.agents.traders.sentiment import SentimentBot
 from app.chain.tradechain import TradeChain
 from app.exchange.adapter import ExchangeAdapter
+
+if TYPE_CHECKING:
+    from app.exchange.manager import ExchangeManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +33,9 @@ class AgentFactory:
 
     Supports creating individual bots, batch-spawning fleets,
     and listing available strategy templates.
+
+    Note: exchange_manager is stored so bots always get the CURRENT active
+    adapter (live or paper), not a stale reference captured at startup.
     """
 
     def __init__(
@@ -35,10 +43,12 @@ class AgentFactory:
         chain: TradeChain,
         registry: AgentRegistry,
         exchange: ExchangeAdapter,
+        exchange_manager: "ExchangeManager | None" = None,
     ) -> None:
         self.chain = chain
         self.registry = registry
         self.exchange = exchange
+        self._exchange_manager = exchange_manager
         self._spawn_counter: dict[str, int] = {}
 
     def _next_id(self, strategy: str) -> str:
@@ -63,10 +73,16 @@ class AgentFactory:
         bot_id = agent_id or self._next_id(strategy)
         bot_class = STRATEGY_MAP[strategy]
 
+        # Always use the CURRENT active exchange from the manager
+        # so bots trade on the live exchange if one is connected
+        active_exchange = (
+            self._exchange_manager.active if self._exchange_manager else self.exchange
+        )
+
         bot = bot_class(
             agent_id=bot_id,
             chain=self.chain,
-            exchange=self.exchange,
+            exchange=active_exchange,
             symbol=symbol,
             trade_size=trade_size,
             **strategy_params,

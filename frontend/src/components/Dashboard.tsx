@@ -18,15 +18,20 @@ function BalanceWidget() {
   const [expanded, setExpanded] = useState(false);
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     const load = () => {
       fetch("/api/portfolio/summary")
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => d && !d.error && setPortfolio(d))
-        .catch(() => {});
+        .then((d) => {
+          if (d && !d.error) setPortfolio(d);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
     };
     load();
-    const interval = setInterval(load, 3000);
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, []);
 

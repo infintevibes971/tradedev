@@ -77,12 +77,41 @@ class LiveAdapter(ExchangeAdapter):
             return False
 
     async def get_balance(self) -> dict[str, Decimal]:
+        """Fetch real balance from exchange via ccxt.
+
+        ccxt.fetch_balance() returns:
+          {"free": {"BTC": 0.5, "USDT": 1000}, "total": {"BTC": 0.5, ...}, ...}
+
+        "free" = available to trade (not locked in orders).
+        "total" entries are plain floats, NOT dicts.
+        """
         balance = await self._exchange.fetch_balance()
-        return {
-            asset: Decimal(str(info["free"]))
-            for asset, info in balance.get("total", {}).items()
-            if isinstance(info, dict) and float(info.get("free", 0)) > 0
-        }
+        result: dict[str, Decimal] = {}
+
+        # "free" gives us the available (non-locked) balance per asset
+        free = balance.get("free", {})
+        if isinstance(free, dict):
+            for asset, amount in free.items():
+                try:
+                    val = Decimal(str(amount))
+                    if val > 0:
+                        result[asset] = val
+                except (ValueError, TypeError):
+                    continue
+
+        # Fallback: if "free" was empty, try "total"
+        if not result:
+            total = balance.get("total", {})
+            if isinstance(total, dict):
+                for asset, amount in total.items():
+                    try:
+                        val = Decimal(str(amount))
+                        if val > 0:
+                            result[asset] = val
+                    except (ValueError, TypeError):
+                        continue
+
+        return result
 
     async def get_order_book(self, symbol: str, depth: int = 10) -> dict[str, list]:
         book = await self._exchange.fetch_order_book(symbol, depth)
