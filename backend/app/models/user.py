@@ -41,6 +41,7 @@ class ApiKey(Base):
     exchange: Mapped[str] = mapped_column(String(50))
     api_key_enc: Mapped[bytes] = mapped_column(LargeBinary)
     api_secret_enc: Mapped[bytes] = mapped_column(LargeBinary)
+    passphrase_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, default=None)
     is_paper: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

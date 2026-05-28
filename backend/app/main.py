@@ -15,6 +15,8 @@ from app.agents.registry import AgentRegistry
 from app.api.routes_agents import router as agents_router
 from app.api.routes_agents import set_factory
 from app.api.routes_ai import router as ai_router
+from app.api.routes_portfolio import router as portfolio_router
+from app.api.routes_portfolio import set_exchange, set_registry as set_portfolio_registry
 from app.api.routes_users import router as users_router
 from app.chain.tradechain import TradeChain
 from app.config import settings
@@ -34,6 +36,8 @@ chain.on_ws_message(ws_manager.broadcast_message)
 exchange = MockAdapter()
 factory = AgentFactory(chain, registry, exchange)
 set_factory(factory)
+set_exchange(exchange)
+set_portfolio_registry(registry)
 
 
 @asynccontextmanager
@@ -74,6 +78,7 @@ app.add_middleware(
 app.include_router(users_router, prefix="/api")
 app.include_router(agents_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(portfolio_router, prefix="/api")
 
 
 @app.get("/health")

@@ -10,7 +10,14 @@ logger = logging.getLogger(__name__)
 class LiveAdapter(ExchangeAdapter):
     """Live exchange adapter using ccxt. Requires valid API keys."""
 
-    def __init__(self, exchange_id: str, api_key: str, api_secret: str, sandbox: bool = True):
+    def __init__(
+        self,
+        exchange_id: str,
+        api_key: str,
+        api_secret: str,
+        passphrase: str | None = None,
+        sandbox: bool = True,
+    ):
         super().__init__(exchange_id)
         try:
             import ccxt.async_support as ccxt_async
@@ -21,12 +28,17 @@ class LiveAdapter(ExchangeAdapter):
         if not exchange_class:
             raise ValueError(f"Unsupported exchange: {exchange_id}")
 
-        self._exchange = exchange_class({
+        config: dict = {
             "apiKey": api_key,
             "secret": api_secret,
             "sandbox": sandbox,
             "enableRateLimit": True,
-        })
+        }
+        # OKX and some others require a passphrase
+        if passphrase:
+            config["password"] = passphrase
+
+        self._exchange = exchange_class(config)
         logger.info(f"LiveAdapter initialized for {exchange_id} (sandbox={sandbox})")
 
     async def get_ticker(self, symbol: str) -> dict[str, Any]:
@@ -36,6 +48,8 @@ class LiveAdapter(ExchangeAdapter):
             "ask": Decimal(str(ticker["ask"] or 0)),
             "last": Decimal(str(ticker["last"] or 0)),
             "volume": Decimal(str(ticker["baseVolume"] or 0)),
+            "change_24h": Decimal(str(ticker.get("percentage") or 0)),
+            "volume_24h": Decimal(str(ticker.get("quoteVolume") or 0)),
         }
 
     async def place_order(

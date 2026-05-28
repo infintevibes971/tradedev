@@ -32,6 +32,25 @@ export interface HealthStatus {
   agents_active: number;
   agents_total: number;
   ws_clients: number;
+  ai_available: boolean;
+  ai_mode: string;
+}
+
+export interface PortfolioSummary {
+  total_balance_usdt: string;
+  realized_pnl: string;
+  unrealized_pnl: string;
+  total_pnl: string;
+  total_trades: number;
+  open_positions: number;
+  active_bots: number;
+  balances: Record<string, string>;
+  strategies: Record<string, {
+    count: number;
+    pnl: string;
+    trades: number;
+    positions: number;
+  }>;
 }
 
 export interface Strategy {

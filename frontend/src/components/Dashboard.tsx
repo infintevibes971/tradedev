@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { AgentStatus, AIStatus, ChainMessage, HealthStatus, Strategy } from "../types/agents";
+import { useCallback, useEffect, useState } from "react";
+import type { AgentStatus, AIStatus, ChainMessage, HealthStatus, PortfolioSummary, Strategy } from "../types/agents";
 
 interface Props {
   health: HealthStatus | null;
@@ -14,32 +14,32 @@ interface Props {
  * Click to expand/collapse the P&L breakdown drawer.
  * ──────────────────────────────────────────────────────────────────── */
 
-function BalanceWidget({ traders }: { traders: AgentStatus[] }) {
+function BalanceWidget() {
   const [expanded, setExpanded] = useState(false);
+  const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
 
-  const totalPnl = traders.reduce((s, a) => s + Number(a.realized_pnl ?? 0), 0);
-  const totalTrades = traders.reduce((s, a) => s + (a.total_trades ?? 0), 0);
+  useEffect(() => {
+    const load = () => {
+      fetch("/api/portfolio/summary")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d && !d.error && setPortfolio(d))
+        .catch(() => {});
+    };
+    load();
+    const interval = setInterval(load, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Simulated starting capital (paper trading baseline)
-  const startingCapital = 10000;
-  const currentBalance = startingCapital + totalPnl;
-  const pctChange = startingCapital > 0 ? (totalPnl / startingCapital) * 100 : 0;
-
-  // Per-strategy breakdown
-  const strategyMap = traders.reduce<
-    Record<string, { count: number; pnl: number; trades: number; positions: number }>
-  >((acc, t) => {
-    const strat = t.strategy ?? "unknown";
-    if (!acc[strat]) acc[strat] = { count: 0, pnl: 0, trades: 0, positions: 0 };
-    acc[strat].count++;
-    acc[strat].pnl += Number(t.realized_pnl ?? 0);
-    acc[strat].trades += t.total_trades ?? 0;
-    if (Number(t.position ?? 0) !== 0) acc[strat].positions++;
-    return acc;
-  }, {});
-
-  const openPositions = traders.filter((t) => Number(t.position ?? 0) !== 0).length;
+  const totalBalance = Number(portfolio?.total_balance_usdt ?? 0);
+  const realizedPnl = Number(portfolio?.realized_pnl ?? 0);
+  const unrealizedPnl = Number(portfolio?.unrealized_pnl ?? 0);
+  const totalPnl = Number(portfolio?.total_pnl ?? 0);
+  const totalTrades = portfolio?.total_trades ?? 0;
+  const openPositions = portfolio?.open_positions ?? 0;
   const isProfit = totalPnl >= 0;
+  const pctChange = totalBalance > 0 ? (totalPnl / totalBalance) * 100 : 0;
+  const strategies = portfolio?.strategies ?? {};
+  const balances = portfolio?.balances ?? {};
 
   return (
     <div
@@ -64,7 +64,7 @@ function BalanceWidget({ traders }: { traders: AgentStatus[] }) {
           </svg>
         </div>
         <p className="text-3xl font-bold text-gray-100 tracking-tight">
-          ${currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          ${totalBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
         <div className="flex items-center gap-3 mt-2">
           <span className={`text-sm font-semibold ${isProfit ? "text-green-400" : "text-red-400"}`}>
@@ -75,54 +75,74 @@ function BalanceWidget({ traders }: { traders: AgentStatus[] }) {
           }`}>
             {isProfit ? "+" : ""}{pctChange.toFixed(2)}%
           </span>
-          <span className="text-[10px] text-gray-600">today</span>
         </div>
       </div>
 
       {/* Expanded breakdown drawer */}
       <div className={`overflow-hidden transition-all duration-300 ${
-        expanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
+        expanded ? "max-h-[700px] opacity-100" : "max-h-0 opacity-0"
       }`}>
         <div className="border-t border-gray-700/50 px-5 py-4 space-y-4">
-          {/* Quick stats row */}
+          {/* P&L breakdown */}
           <div className="grid grid-cols-3 gap-3">
             <div className="text-center">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Starting</p>
-              <p className="text-sm font-semibold text-gray-300 mt-0.5">
-                ${startingCapital.toLocaleString()}
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Realized</p>
+              <p className={`text-sm font-semibold mt-0.5 ${realizedPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                {realizedPnl >= 0 ? "+" : ""}{realizedPnl.toFixed(2)}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Unrealized</p>
+              <p className={`text-sm font-semibold mt-0.5 ${unrealizedPnl >= 0 ? "text-blue-400" : "text-orange-400"}`}>
+                {unrealizedPnl >= 0 ? "+" : ""}{unrealizedPnl.toFixed(2)}
               </p>
             </div>
             <div className="text-center">
               <p className="text-[10px] text-gray-500 uppercase tracking-wider">Open Pos.</p>
-              <p className="text-sm font-semibold text-blue-400 mt-0.5">{openPositions}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[10px] text-gray-500 uppercase tracking-wider">Total Trades</p>
-              <p className="text-sm font-semibold text-gray-300 mt-0.5">{totalTrades}</p>
+              <p className="text-sm font-semibold text-gray-300 mt-0.5">{openPositions}</p>
             </div>
           </div>
 
+          {/* Wallet balances */}
+          {Object.keys(balances).length > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-medium">
+                Wallet
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {Object.entries(balances).map(([asset, amount]) => (
+                  <div key={asset} className="flex justify-between bg-gray-800/30 rounded px-2.5 py-1.5 text-[11px]">
+                    <span className="text-gray-400 font-medium">{asset}</span>
+                    <span className="text-gray-200 tabular-nums">{Number(amount).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Strategy breakdown */}
-          {Object.keys(strategyMap).length > 0 && (
+          {Object.keys(strategies).length > 0 && (
             <div>
               <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2 font-medium">
                 P&L by Strategy
               </p>
               <div className="space-y-1.5">
-                {Object.entries(strategyMap)
-                  .sort(([, a], [, b]) => b.pnl - a.pnl)
+                {Object.entries(strategies)
+                  .sort(([, a], [, b]) => Number(b.pnl) - Number(a.pnl))
                   .map(([strat, data]) => {
-                    const stratProfit = data.pnl >= 0;
-                    const barWidth = Math.min(Math.abs(data.pnl) / (Math.abs(totalPnl) || 1) * 100, 100);
+                    const pnl = Number(data.pnl);
+                    const stratProfit = pnl >= 0;
+                    const maxPnl = Math.max(...Object.values(strategies).map((s) => Math.abs(Number(s.pnl))), 1);
+                    const barWidth = Math.min((Math.abs(pnl) / maxPnl) * 100, 100);
                     return (
-                      <div key={strat} className="group">
+                      <div key={strat}>
                         <div className="flex items-center justify-between text-xs mb-0.5">
                           <span className="text-gray-300 capitalize">{strat.replace("_", " ")}</span>
                           <div className="flex items-center gap-3">
                             <span className="text-gray-600">{data.count} bots</span>
                             <span className="text-gray-600">{data.trades} trades</span>
                             <span className={`font-medium ${stratProfit ? "text-green-400" : "text-red-400"}`}>
-                              {stratProfit ? "+" : ""}${data.pnl.toFixed(2)}
+                              {stratProfit ? "+" : ""}${pnl.toFixed(2)}
                             </span>
                           </div>
                         </div>
@@ -141,11 +161,15 @@ function BalanceWidget({ traders }: { traders: AgentStatus[] }) {
             </div>
           )}
 
-          {Object.keys(strategyMap).length === 0 && (
+          {Object.keys(strategies).length === 0 && (
             <p className="text-xs text-gray-600 text-center py-2">
               No active strategies — spawn bots below to start trading
             </p>
           )}
+
+          <p className="text-[9px] text-gray-700 text-center">
+            {totalTrades} total trades / {portfolio?.active_bots ?? 0} active bots
+          </p>
         </div>
       </div>
     </div>
@@ -364,8 +388,8 @@ export function Dashboard({ health, agents, messages, strategies, onSpawn }: Pro
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Clickable Balance Widget */}
-        <BalanceWidget traders={traders} />
+        {/* Clickable Balance Widget — fetches real data from /api/portfolio/summary */}
+        <BalanceWidget />
 
         {/* Quick metrics row */}
         <div className="grid grid-cols-2 gap-2">

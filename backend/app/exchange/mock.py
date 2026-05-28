@@ -45,11 +45,15 @@ class MockAdapter(ExchangeAdapter):
         base = self._get_base_price(symbol)
         last = self._jitter_price(base)
         spread = base * Decimal("0.001")
+        change_24h = Decimal(str(random.uniform(-5.0, 5.0))).quantize(Decimal("0.01"))
+        volume_24h = Decimal(str(random.uniform(50000, 500000))).quantize(Decimal("0.01"))
         return {
             "bid": last - spread,
             "ask": last + spread,
             "last": last,
             "volume": Decimal(str(random.uniform(1000, 50000))).quantize(Decimal("0.01")),
+            "change_24h": change_24h,
+            "volume_24h": volume_24h,
         }
 
     async def place_order(

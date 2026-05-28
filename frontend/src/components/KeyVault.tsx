@@ -3,6 +3,7 @@ import type { AIStatus, StoredApiKey, UserProfile } from "../types/agents";
 
 const EXCHANGES = [
   { value: "binance", label: "Binance" },
+  { value: "okx", label: "OKX" },
   { value: "alpaca", label: "Alpaca" },
   { value: "coinbase", label: "Coinbase" },
   { value: "kraken", label: "Kraken" },
@@ -108,33 +109,42 @@ function AuthForm({ onLogin }: { onLogin: (user: UserProfile) => void }) {
   );
 }
 
+const PASSPHRASE_EXCHANGES = ["okx"];
+
 function AddKeyForm({ userId, onAdded }: { userId: string; onAdded: () => void }) {
   const [exchange, setExchange] = useState(EXCHANGES[0].value);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [isPaper, setIsPaper] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const needsPassphrase = PASSPHRASE_EXCHANGES.includes(exchange);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
+      const payload: Record<string, unknown> = {
+        exchange,
+        api_key: apiKey,
+        api_secret: apiSecret,
+        is_paper: isPaper,
+      };
+      if (needsPassphrase) payload.passphrase = passphrase;
+
       const res = await fetch(`/api/users/${userId}/keys`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          exchange,
-          api_key: apiKey,
-          api_secret: apiSecret,
-          is_paper: isPaper,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to save key");
       setApiKey("");
       setApiSecret("");
+      setPassphrase("");
       onAdded();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -181,6 +191,16 @@ function AddKeyForm({ userId, onAdded }: { userId: string; onAdded: () => void }
         required
         className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:outline-none"
       />
+      {needsPassphrase && (
+        <input
+          type="password"
+          placeholder="Passphrase (required for OKX)"
+          value={passphrase}
+          onChange={(e) => setPassphrase(e.target.value)}
+          required
+          className="w-full px-3 py-2 bg-gray-800 border border-amber-700/50 rounded text-sm text-gray-200 placeholder-gray-500 focus:border-amber-500 focus:outline-none"
+        />
+      )}
       {error && <p className="text-xs text-red-400">{error}</p>}
       <button
         type="submit"

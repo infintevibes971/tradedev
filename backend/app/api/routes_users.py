@@ -27,6 +27,7 @@ class ApiKeyCreate(BaseModel):
     exchange: str
     api_key: str
     api_secret: str
+    passphrase: str | None = None  # Required for OKX
     is_paper: bool = True
 
 
@@ -64,11 +65,16 @@ async def add_api_key(
     if not user:
         raise HTTPException(404, "User not found")
 
+    # OKX requires a passphrase in addition to key + secret
+    if body.exchange == "okx" and not body.passphrase:
+        raise HTTPException(400, "OKX requires a passphrase")
+
     api_key = ApiKey(
         user_id=user_id,
         exchange=body.exchange,
         api_key_enc=vault.encrypt(body.api_key),
         api_secret_enc=vault.encrypt(body.api_secret),
+        passphrase_enc=vault.encrypt(body.passphrase) if body.passphrase else None,
         is_paper=body.is_paper,
     )
     session.add(api_key)
