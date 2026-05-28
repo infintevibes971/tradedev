@@ -20,32 +20,59 @@ MOCK_PRICES: dict[str, Decimal] = {
 
 
 class MockAdapter(ExchangeAdapter):
-    """Paper trading adapter with simulated prices and order fills."""
+    """Paper trading adapter with simulated prices and order fills.
+
+    Prices drift over time (random walk) so strategy bots see realistic
+    trends and reversals, generating actual BUY/SELL signals.
+    """
 
     def __init__(self) -> None:
-        super().__init__("mock")
+        super().__init__("paper")
         self._balances: dict[str, Decimal] = {
             "USDT": Decimal("100000.00"),
             "BTC": Decimal("0"),
             "ETH": Decimal("0"),
         }
         self._orders: dict[str, dict] = {}
-        self._price_jitter = Decimal("0.005")
-
-    def _jitter_price(self, base_price: Decimal) -> Decimal:
-        pct = Decimal(str(random.uniform(-float(self._price_jitter), float(self._price_jitter))))
-        return (base_price * (1 + pct)).quantize(Decimal("0.01"))
+        # Larger jitter + drift for realistic price action
+        self._price_jitter = Decimal("0.008")
+        self._drifts: dict[str, Decimal] = {}  # cumulative per-symbol drift
 
     def _get_base_price(self, symbol: str) -> Decimal:
+        """Static base price for a symbol (no drift)."""
         if symbol not in MOCK_PRICES:
             raise ValueError(f"Unknown mock symbol: {symbol}")
         return MOCK_PRICES[symbol]
 
-    async def get_ticker(self, symbol: str) -> dict[str, Any]:
+    def _get_drifted_price(self, symbol: str) -> Decimal:
+        """Random-walk price that trends and reverts over time.
+
+        Each call shifts the price by up to ±0.8% and adds cumulative drift
+        of ±0.3%, creating realistic mini-trends that strategy bots can detect.
+        """
         base = self._get_base_price(symbol)
-        last = self._jitter_price(base)
-        spread = base * Decimal("0.001")
-        change_24h = Decimal(str(random.uniform(-5.0, 5.0))).quantize(Decimal("0.01"))
+
+        # Accumulate drift — trends form then revert via mean reversion
+        drift = self._drifts.get(symbol, Decimal("0"))
+        step = Decimal(str(random.uniform(-0.003, 0.003)))
+        # Mean-revert if drift gets too large (>5%)
+        if drift > Decimal("0.05"):
+            step -= Decimal("0.002")
+        elif drift < Decimal("-0.05"):
+            step += Decimal("0.002")
+        drift += step
+        self._drifts[symbol] = drift
+
+        # Apply drift + random jitter
+        jitter = Decimal(str(random.uniform(-float(self._price_jitter), float(self._price_jitter))))
+        price = base * (1 + drift + jitter)
+        return price.quantize(Decimal("0.01"))
+
+    async def get_ticker(self, symbol: str) -> dict[str, Any]:
+        last = self._get_drifted_price(symbol)
+        spread = last * Decimal("0.001")
+        drift = self._drifts.get(symbol, Decimal("0"))
+        change_24h = (drift * 100).quantize(Decimal("0.01"))
         volume_24h = Decimal(str(random.uniform(50000, 500000))).quantize(Decimal("0.01"))
         return {
             "bid": last - spread,

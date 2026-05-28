@@ -18,8 +18,8 @@ class MeanReversionBot(TradingBot):
         chain: TradeChain,
         exchange: ExchangeAdapter,
         symbol: str = "BTC/USDT",
-        window: int = 20,
-        threshold: float = 0.02,
+        window: int = 10,
+        threshold: float = 0.008,
         **kwargs,
     ) -> None:
         super().__init__(

@@ -18,8 +18,8 @@ class MomentumBot(TradingBot):
         chain: TradeChain,
         exchange: ExchangeAdapter,
         symbol: str = "BTC/USDT",
-        lookback: int = 14,
-        momentum_threshold: float = 0.03,
+        lookback: int = 8,
+        momentum_threshold: float = 0.01,
         **kwargs,
     ) -> None:
         super().__init__(

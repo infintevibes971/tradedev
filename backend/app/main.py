@@ -51,9 +51,25 @@ async def lifespan(app: FastAPI):
     await registry.register(ops)
     await registry.register(qa)
 
+    # Auto-spawn a starter fleet so the dashboard shows live trading activity
+    # immediately — bots run on paper mode until a live exchange is connected
+    starter_fleet = [
+        {"strategy": "mean_reversion", "symbol": "BTC/USDT"},
+        {"strategy": "momentum", "symbol": "BTC/USDT"},
+        {"strategy": "momentum", "symbol": "ETH/USDT"},
+        {"strategy": "grid", "symbol": "BTC/USDT"},
+        {"strategy": "sentiment", "symbol": "SOL/USDT"},
+    ]
+    for bot_config in starter_fleet:
+        try:
+            await factory.create_bot(**bot_config, autostart=True)
+        except Exception as e:
+            logging.warning(f"Failed to spawn starter bot: {e}")
+
+    bot_count = registry.active_count
     logging.info(
         f"{settings.app_name} starting — TradeChain online, DB ready, "
-        f"3 managers active"
+        f"{bot_count} agents active ({bot_count - 3} trading bots)"
     )
     yield
     await registry.stop_all()

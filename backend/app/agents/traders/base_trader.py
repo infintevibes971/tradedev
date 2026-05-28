@@ -34,7 +34,7 @@ class TradingBot(BaseAgent):
         exchange: ExchangeAdapter,
         symbol: str = "BTC/USDT",
         trade_size: Decimal = Decimal("0.01"),
-        loop_interval: float = 10.0,
+        loop_interval: float = 5.0,
     ) -> None:
         super().__init__(
             agent_id=agent_id,
