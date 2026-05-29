@@ -37,6 +37,11 @@ class ExchangeManager:
         self._live_adapters: dict[str, LiveAdapter] = {}  # keyed by api_key DB id
         self._active_exchange: ExchangeAdapter = self._mock
         self._active_exchange_name: str = "paper"
+        self._registry = None  # set by main.py after registry creation
+
+    def set_registry(self, registry) -> None:
+        """Store a reference to the agent registry for live-switching bots."""
+        self._registry = registry
 
     @property
     def active(self) -> ExchangeAdapter:
@@ -132,12 +137,17 @@ class ExchangeManager:
             return {"status": "error", "error": str(e)}
 
     async def switch_to_live(self, key_id: str) -> bool:
-        """Switch the active exchange to a connected live adapter."""
+        """Switch the active exchange to a connected live adapter.
+
+        Also hot-swaps all running trader bots to use the live adapter
+        so they trade on the real exchange immediately.
+        """
         adapter = self._live_adapters.get(key_id)
         if not adapter:
             return False
         self._active_exchange = adapter
         self._active_exchange_name = adapter.exchange_id
+        self._update_bot_exchanges(adapter)
         logger.info("Switched active exchange to %s", adapter.exchange_id)
         return True
 
@@ -145,7 +155,32 @@ class ExchangeManager:
         """Switch back to paper trading (MockAdapter)."""
         self._active_exchange = self._mock
         self._active_exchange_name = "paper"
+        self._update_bot_exchanges(self._mock)
         logger.info("Switched to paper trading")
+
+    def _update_bot_exchanges(self, adapter: ExchangeAdapter) -> None:
+        """Hot-swap all running trader bots to a new exchange adapter.
+
+        This is the critical link: when a user connects OKX (or switches
+        back to paper), every running bot's `self.exchange` gets updated
+        so trades flow through the correct adapter immediately.
+        """
+        if not self._registry:
+            return
+        agents = self._registry.list_agents()
+        count = 0
+        for info in agents:
+            if not info.get("role", "").startswith("trader:"):
+                continue
+            agent = self._registry.get(info["agent_id"])
+            if agent and hasattr(agent, "exchange"):
+                agent.exchange = adapter
+                count += 1
+        if count:
+            logger.info(
+                "Hot-swapped %d trading bot(s) to %s",
+                count, adapter.exchange_id,
+            )
 
     async def get_all_balances(self) -> dict[str, dict]:
         """Get balances from all connected exchanges + mock.

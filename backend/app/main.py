@@ -34,6 +34,7 @@ chain.on_ws_message(ws_manager.broadcast_message)
 
 
 exchange_manager = ExchangeManager()
+exchange_manager.set_registry(registry)
 factory = AgentFactory(chain, registry, exchange_manager.active, exchange_manager=exchange_manager)
 set_factory(factory)
 set_exchange_manager(exchange_manager)
