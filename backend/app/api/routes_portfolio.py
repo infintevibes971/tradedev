@@ -32,15 +32,20 @@ def set_registry(registry) -> None:
 @router.get("/balance")
 async def get_balance() -> dict:
     """Real balance from the active exchange (OKX, Binance, or paper)."""
+    import asyncio
+
     if not _exchange_manager:
         return {"error": "Exchange manager not initialized", "balances": {}}
 
     try:
-        raw_balances = await _exchange_manager.get_active_balance()
-    except Exception as e:
-        logger.warning("Failed to fetch balance from %s: %s", _exchange_manager.active_name, e)
+        raw_balances = await asyncio.wait_for(
+            _exchange_manager.get_active_balance(), timeout=10.0
+        )
+    except (asyncio.TimeoutError, Exception) as e:
+        err_msg = "timeout" if isinstance(e, asyncio.TimeoutError) else str(e)
+        logger.warning("Failed to fetch balance from %s: %s", _exchange_manager.active_name, err_msg)
         return {
-            "error": str(e),
+            "error": err_msg,
             "balances": {},
             "total_usdt": "0.00",
             "exchange": _exchange_manager.active_name,
@@ -91,14 +96,18 @@ async def get_balance() -> dict:
 @router.get("/summary")
 async def portfolio_summary() -> dict:
     """Full portfolio summary with real exchange data."""
+    import asyncio
+
     if not _exchange_manager or not _registry:
         return {"error": "System not initialized"}
 
-    # Get real balance from active exchange
+    # Get real balance from active exchange (with timeout)
     try:
-        raw_balances = await _exchange_manager.get_active_balance()
-    except Exception as e:
-        logger.warning("Summary: failed to fetch balance: %s", e)
+        raw_balances = await asyncio.wait_for(
+            _exchange_manager.get_active_balance(), timeout=10.0
+        )
+    except (asyncio.TimeoutError, Exception) as e:
+        logger.warning("Summary: balance fetch failed: %s", e)
         raw_balances = {}
 
     total_usdt = Decimal("0")
@@ -115,7 +124,9 @@ async def portfolio_summary() -> dict:
                 if amt <= 0:
                     continue
                 symbol = f"{asset}/USDT"
-                ticker = await _exchange_manager.active.get_ticker(symbol)
+                ticker = await asyncio.wait_for(
+                    _exchange_manager.active.get_ticker(symbol), timeout=5.0
+                )
                 price = Decimal(str(ticker["last"]))
                 total_usdt += amt * price
             except Exception:
@@ -150,7 +161,9 @@ async def portfolio_summary() -> dict:
             open_positions += 1
             symbol = t.get("symbol", "BTC/USDT")
             try:
-                ticker = await _exchange_manager.active.get_ticker(symbol)
+                ticker = await asyncio.wait_for(
+                    _exchange_manager.active.get_ticker(symbol), timeout=5.0
+                )
                 current_price = Decimal(str(ticker["last"]))
                 if position > 0:
                     unrealized_pnl += (current_price - entry_price) * position
