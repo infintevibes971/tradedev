@@ -100,14 +100,24 @@ class TradingBot(BaseAgent):
     async def execute(self) -> None:
         try:
             signal = await self.generate_signal()
-        except Exception:
-            self.metrics["errors"] += 1
-            self.logger.exception("Signal generation failed")
-            await self.send(
-                MessageType.ERROR_REPORT,
-                {"agent_id": self.agent_id, "error": "Signal generation failure"},
-            )
+        except Exception as e:
+            self._consecutive_errors = getattr(self, "_consecutive_errors", 0) + 1
+            # Only log/report errors occasionally to avoid flooding
+            if self._consecutive_errors <= 3 or self._consecutive_errors % 20 == 0:
+                self.metrics["errors"] += 1
+                self.logger.warning(
+                    "Signal generation failed (%d consecutive): %s",
+                    self._consecutive_errors, e,
+                )
+                if self._consecutive_errors <= 3:
+                    await self.send(
+                        MessageType.ERROR_REPORT,
+                        {"agent_id": self.agent_id, "error": f"Signal error: {e}"},
+                    )
             return
+
+        # Reset error counter on success
+        self._consecutive_errors = 0
 
         if signal == Signal.HOLD:
             return

@@ -8,7 +8,7 @@ from app.exchange.adapter import ExchangeAdapter
 logger = logging.getLogger(__name__)
 
 # Timeout for any single exchange API call (seconds)
-API_TIMEOUT = 15
+API_TIMEOUT = 8
 
 
 class LiveAdapter(ExchangeAdapter):
@@ -46,21 +46,37 @@ class LiveAdapter(ExchangeAdapter):
             config["password"] = passphrase
 
         self._exchange = exchange_class(config)
+        self._ticker_cache: dict[str, tuple[float, dict]] = {}  # symbol → (timestamp, data)
+        self._cache_ttl = 3.0  # seconds — avoids hammering OKX for same symbol
         logger.info(f"LiveAdapter initialized for {exchange_id} (sandbox={sandbox})")
 
     async def get_ticker(self, symbol: str) -> dict[str, Any]:
+        import time
+
+        # Return cached ticker if fresh enough (avoids 10 bots each waiting 8s)
+        cached = self._ticker_cache.get(symbol)
+        if cached:
+            ts, data = cached
+            if time.time() - ts < self._cache_ttl:
+                return data
+
         try:
             ticker = await asyncio.wait_for(
                 self._exchange.fetch_ticker(symbol), timeout=API_TIMEOUT
             )
         except asyncio.TimeoutError:
             logger.warning("Ticker timeout for %s on %s", symbol, self.exchange_id)
+            # Return cached data if available, even if stale
+            if cached:
+                return cached[1]
             raise ValueError(f"Ticker timeout: {symbol}")
         except Exception as e:
             logger.warning("Ticker error for %s on %s: %s", symbol, self.exchange_id, e)
+            if cached:
+                return cached[1]
             raise
 
-        return {
+        result = {
             "bid": Decimal(str(ticker.get("bid") or 0)),
             "ask": Decimal(str(ticker.get("ask") or 0)),
             "last": Decimal(str(ticker.get("last") or 0)),
@@ -68,6 +84,8 @@ class LiveAdapter(ExchangeAdapter):
             "change_24h": Decimal(str(ticker.get("percentage") or 0)),
             "volume_24h": Decimal(str(ticker.get("quoteVolume") or 0)),
         }
+        self._ticker_cache[symbol] = (time.time(), result)
+        return result
 
     async def place_order(
         self, symbol: str, side: str, quantity: Decimal, price: Decimal | None = None
