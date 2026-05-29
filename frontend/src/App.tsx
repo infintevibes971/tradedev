@@ -242,6 +242,7 @@ function App() {
             messages={messages}
             strategies={strategies}
             onSpawn={spawnBots}
+            onGoToSettings={() => setActiveTab("settings")}
           />
         </div>
 
@@ -267,9 +268,26 @@ function App() {
 
         {/* Settings overlay */}
         {activeTab === "settings" && (
-          <div className="absolute inset-0 bg-gray-950/95 backdrop-blur-sm z-10 flex justify-center overflow-y-auto">
-            <div className="w-full max-w-lg py-4">
-              <KeyVault user={user} onLogin={handleLogin} onLogout={handleLogout} />
+          <div className="absolute inset-0 bg-gray-950/95 backdrop-blur-sm z-10 flex flex-col overflow-y-auto">
+            {/* Back button bar */}
+            <div className="sticky top-0 z-20 bg-gray-900/90 backdrop-blur-xl border-b border-gray-800/60 px-4 py-2.5 flex items-center justify-between">
+              <button
+                onClick={() => setActiveTab("dashboard")}
+                className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-100 transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+                <span>Back to Dashboard</span>
+              </button>
+              <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+                Settings
+              </h2>
+            </div>
+            <div className="flex-1 flex justify-center">
+              <div className="w-full max-w-lg py-4">
+                <KeyVault user={user} onLogin={handleLogin} onLogout={handleLogout} />
+              </div>
             </div>
           </div>
         )}
