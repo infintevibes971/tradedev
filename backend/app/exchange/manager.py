@@ -84,6 +84,8 @@ class ExchangeManager:
                     passphrase=passphrase,
                     sandbox=key.is_paper,
                 )
+                # Pre-load markets so first API call doesn't take 10+ seconds
+                await adapter._ensure_markets()
                 self._live_adapters[key.id] = adapter
                 connected.append({
                     "id": key.id,

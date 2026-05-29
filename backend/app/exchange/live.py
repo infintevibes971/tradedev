@@ -48,7 +48,21 @@ class LiveAdapter(ExchangeAdapter):
         self._exchange = exchange_class(config)
         self._ticker_cache: dict[str, tuple[float, dict]] = {}  # symbol → (timestamp, data)
         self._cache_ttl = 3.0  # seconds — avoids hammering OKX for same symbol
+        self._markets_loaded = False
         logger.info(f"LiveAdapter initialized for {exchange_id} (sandbox={sandbox})")
+
+    async def _ensure_markets(self) -> None:
+        """Load markets once — ccxt calls this implicitly on every API call
+        if not done, causing massive latency. Pre-loading avoids the penalty."""
+        if not self._markets_loaded:
+            try:
+                await asyncio.wait_for(
+                    self._exchange.load_markets(), timeout=API_TIMEOUT
+                )
+                self._markets_loaded = True
+                logger.info("Markets loaded for %s (%d symbols)", self.exchange_id, len(self._exchange.markets))
+            except Exception as e:
+                logger.warning("Failed to load markets for %s: %s", self.exchange_id, e)
 
     async def get_ticker(self, symbol: str) -> dict[str, Any]:
         import time
@@ -60,6 +74,7 @@ class LiveAdapter(ExchangeAdapter):
             if time.time() - ts < self._cache_ttl:
                 return data
 
+        await self._ensure_markets()
         try:
             ticker = await asyncio.wait_for(
                 self._exchange.fetch_ticker(symbol), timeout=API_TIMEOUT
@@ -137,6 +152,7 @@ class LiveAdapter(ExchangeAdapter):
         "free" = available to trade (not locked in orders).
         "total" entries are plain floats, NOT dicts.
         """
+        await self._ensure_markets()
         try:
             balance = await asyncio.wait_for(
                 self._exchange.fetch_balance(), timeout=API_TIMEOUT
