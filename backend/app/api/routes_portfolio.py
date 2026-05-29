@@ -4,10 +4,13 @@ Queries the REAL exchange balance (OKX, Binance, etc.) via ExchangeManager,
 not hardcoded numbers.
 """
 
-from decimal import Decimal
+import logging
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -35,25 +38,51 @@ async def get_balance() -> dict:
     try:
         raw_balances = await _exchange_manager.get_active_balance()
     except Exception as e:
-        return {"error": str(e), "balances": {}}
+        logger.warning("Failed to fetch balance from %s: %s", _exchange_manager.active_name, e)
+        return {
+            "error": str(e),
+            "balances": {},
+            "total_usdt": "0.00",
+            "exchange": _exchange_manager.active_name,
+            "is_live": _exchange_manager.is_live,
+        }
 
-    balances = {asset: str(amount) for asset, amount in raw_balances.items()}
+    balances = {}
+    for asset, amount in raw_balances.items():
+        try:
+            balances[asset] = str(amount)
+        except Exception:
+            continue
 
     # Calculate total in USDT terms
-    total_usdt = raw_balances.get("USDT", Decimal("0"))
+    total_usdt = Decimal("0")
+    try:
+        total_usdt = Decimal(str(raw_balances.get("USDT", 0)))
+    except (InvalidOperation, TypeError):
+        pass
+
     for asset, amount in raw_balances.items():
-        if asset in ("USDT", "USD") or amount == 0:
+        if asset in ("USDT", "USD"):
             continue
-        symbol = f"{asset}/USDT"
         try:
+            amt = Decimal(str(amount))
+            if amt <= 0:
+                continue
+            symbol = f"{asset}/USDT"
             ticker = await _exchange_manager.active.get_ticker(symbol)
-            total_usdt += amount * ticker["last"]
-        except (ValueError, KeyError):
-            pass
+            price = Decimal(str(ticker["last"]))
+            total_usdt += amt * price
+        except Exception:
+            continue
+
+    try:
+        total_str = str(total_usdt.quantize(Decimal("0.01")))
+    except Exception:
+        total_str = str(round(float(total_usdt), 2))
 
     return {
         "balances": balances,
-        "total_usdt": str(total_usdt.quantize(Decimal("0.01"))),
+        "total_usdt": total_str,
         "exchange": _exchange_manager.active_name,
         "is_live": _exchange_manager.is_live,
     }
@@ -69,20 +98,28 @@ async def portfolio_summary() -> dict:
     try:
         raw_balances = await _exchange_manager.get_active_balance()
     except Exception as e:
+        logger.warning("Summary: failed to fetch balance: %s", e)
         raw_balances = {}
 
     total_usdt = Decimal("0")
     if isinstance(raw_balances, dict):
-        total_usdt = raw_balances.get("USDT", Decimal("0"))
+        try:
+            total_usdt = Decimal(str(raw_balances.get("USDT", 0)))
+        except (InvalidOperation, TypeError):
+            pass
         for asset, amount in raw_balances.items():
-            if asset in ("USDT", "USD") or amount == 0:
+            if asset in ("USDT", "USD"):
                 continue
-            symbol = f"{asset}/USDT"
             try:
+                amt = Decimal(str(amount))
+                if amt <= 0:
+                    continue
+                symbol = f"{asset}/USDT"
                 ticker = await _exchange_manager.active.get_ticker(symbol)
-                total_usdt += amount * ticker["last"]
-            except (ValueError, KeyError):
-                pass
+                price = Decimal(str(ticker["last"]))
+                total_usdt += amt * price
+            except Exception:
+                continue
 
     # Get bot stats
     agents = _registry.list_agents()
@@ -95,24 +132,31 @@ async def portfolio_summary() -> dict:
     strategies: dict[str, dict] = {}
 
     for t in traders:
-        rpnl = Decimal(str(t.get("realized_pnl", "0")))
+        try:
+            rpnl = Decimal(str(t.get("realized_pnl", "0")))
+        except (InvalidOperation, TypeError):
+            rpnl = Decimal("0")
         realized_pnl += rpnl
         total_trades += t.get("total_trades", 0)
 
-        position = Decimal(str(t.get("position", "0")))
-        entry_price = Decimal(str(t.get("entry_price", "0")))
+        try:
+            position = Decimal(str(t.get("position", "0")))
+            entry_price = Decimal(str(t.get("entry_price", "0")))
+        except (InvalidOperation, TypeError):
+            position = Decimal("0")
+            entry_price = Decimal("0")
 
         if position != 0 and entry_price != 0:
             open_positions += 1
             symbol = t.get("symbol", "BTC/USDT")
             try:
                 ticker = await _exchange_manager.active.get_ticker(symbol)
-                current_price = ticker["last"]
+                current_price = Decimal(str(ticker["last"]))
                 if position > 0:
                     unrealized_pnl += (current_price - entry_price) * position
                 else:
                     unrealized_pnl += (entry_price - current_price) * abs(position)
-            except (ValueError, KeyError):
+            except Exception:
                 pass
 
         strat = t.get("strategy", "unknown")
@@ -124,11 +168,17 @@ async def portfolio_summary() -> dict:
         if position != 0:
             strategies[strat]["positions"] += 1
 
+    def _q(val: Decimal) -> str:
+        try:
+            return str(val.quantize(Decimal("0.01")))
+        except Exception:
+            return str(round(float(val), 2))
+
     return {
-        "total_balance_usdt": str(total_usdt.quantize(Decimal("0.01"))),
-        "realized_pnl": str(realized_pnl.quantize(Decimal("0.01"))),
-        "unrealized_pnl": str(unrealized_pnl.quantize(Decimal("0.01"))),
-        "total_pnl": str((realized_pnl + unrealized_pnl).quantize(Decimal("0.01"))),
+        "total_balance_usdt": _q(total_usdt),
+        "realized_pnl": _q(realized_pnl),
+        "unrealized_pnl": _q(unrealized_pnl),
+        "total_pnl": _q(realized_pnl + unrealized_pnl),
         "total_trades": total_trades,
         "open_positions": open_positions,
         "active_bots": len(traders),
@@ -138,7 +188,7 @@ async def portfolio_summary() -> dict:
         "strategies": {
             name: {
                 "count": s["count"],
-                "pnl": str(s["pnl"].quantize(Decimal("0.01"))),
+                "pnl": _q(s["pnl"]),
                 "trades": s["trades"],
                 "positions": s["positions"],
             }
